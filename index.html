@@ -1,469 +1,243 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged,
-  signOut
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  onSnapshot, 
-  addDoc, 
-  deleteDoc, 
-  query, 
-  serverTimestamp,
-  setDoc,
-  getDoc
-} from 'firebase/firestore';
-import { 
-  LayoutDashboard, 
-  ReceiptText, 
-  Target, 
-  LogOut, 
-  Plus, 
-  Trash2, 
-  Wallet, 
-  TrendingUp, 
-  TrendingDown, 
-  X,
-  Sparkles,
-  Search,
-  Lock,
-  User,
-  UserPlus,
-  Loader2,
-  CheckCircle2,
-  FileSpreadsheet,
-  Download
-} from 'lucide-react';
-
-// --- FIREBASE CONFIG ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'budgetin-pro-v1';
-
-const CATEGORIES = {
-  income: ['Gaji', 'Freelance', 'Investasi', 'Lainnya'],
-  expense: ['Makanan', 'Transportasi', 'Tagihan', 'Hiburan', 'Kesehatan', 'Belanja', 'Lainnya']
-};
-
-const formatRupiah = (number) => {
-  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(number);
-};
-
-export default function App() {
-  // --- AUTH & USER STATE ---
-  const [user, setUser] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
-  const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
-
-  // --- APP STATE ---
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [transactions, setTransactions] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    type: 'expense', amount: '', category: 'Makanan', description: ''
-  });
-
-  // 1. Inisialisasi Auth
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Budgetin Pro</title>
+    <!-- Tailwind CSS untuk Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & Babel untuk menjalankan UI -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        body { 
+            font-family: 'Plus Jakarta Sans', sans-serif; 
+            background-color: #f1f5f9;
+            -webkit-tap-highlight-color: transparent;
         }
-      } catch (err) {
-        console.error("Auth Init Error:", err);
-      } finally {
-        setAuthLoading(false);
-      }
-    };
-
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // 2. Fetch Data dari Firestore
-  useEffect(() => {
-    if (!user) return;
-    const q = collection(db, 'artifacts', appId, 'users', user.uid, 'transactions');
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      const sorted = docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setTransactions(sorted);
-    }, (err) => console.error("Firestore Error:", err));
-    return () => unsubscribe();
-  }, [user]);
-
-  // --- LOGIC AUTH ---
-  const handleAuthSubmit = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    setIsSubmittingAuth(true);
-    const username = e.target.username.value.trim().toLowerCase();
-    const password = e.target.password.value;
-
-    try {
-      const credRef = doc(db, 'artifacts', appId, 'public', 'data', 'credentials', username);
-      const credSnap = await getDoc(credRef);
-
-      if (isRegisterMode) {
-        if (credSnap.exists()) {
-          setAuthError('Username sudah terdaftar, bro!');
-        } else {
-          await setDoc(credRef, { password, uid: user.uid });
-          alert('Akun Budgetin berhasil dibuat!');
-          setIsRegisterMode(false);
+        .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom); }
+        .animate-pop { animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes pop {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
         }
-      } else {
-        if (credSnap.exists() && credSnap.data().password === password) {
-          alert('Berhasil masuk ke Budgetin!');
-        } else {
-          setAuthError('Username atau Password salah!');
-        }
-      }
-    } catch (err) {
-      setAuthError('Koneksi server bermasalah.');
-    } finally {
-      setIsSubmittingAuth(false);
-    }
-  };
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
-  // --- EKSPOR GOOGLE SHEETS ---
-  const exportToSheets = () => {
-    if (transactions.length === 0) return alert('Data masih kosong!');
-    const headers = ['Tanggal', 'Deskripsi', 'Kategori', 'Tipe', 'Jumlah'];
-    const rows = transactions.map(trx => [
-      trx.createdAt?.seconds ? new Date(trx.createdAt.seconds * 1000).toLocaleDateString('id-ID') : '-',
-      trx.description,
-      trx.category,
-      trx.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
-      trx.amount
-    ]);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `budgetin_export_${new Date().getTime()}.csv`;
-    link.click();
-  };
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
 
-  // --- LOGIC TRANSAKSI ---
-  const totals = useMemo(() => {
-    return transactions.reduce((acc, curr) => {
-      const amt = Number(curr.amount) || 0;
-      if (curr.type === 'income') acc.income += amt;
-      else acc.expense += amt;
-      acc.balance = acc.income - acc.expense;
-      return acc;
-    }, { income: 0, expense: 0, balance: 0 });
-  }, [transactions]);
+        // Komponen Icon Lucide
+        const Icon = ({ name, size = 24, className = "" }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
 
-  const saveTransaction = async (e) => {
-    e.preventDefault();
-    if (!user) return;
-    try {
-      const ref = collection(db, 'artifacts', appId, 'users', user.uid, 'transactions');
-      await addDoc(ref, {
-        ...formData,
-        amount: Number(formData.amount),
-        createdAt: serverTimestamp()
-      });
-      setIsModalOpen(false);
-      setFormData({ type: 'expense', amount: '', category: 'Makanan', description: '' });
-    } catch (err) {
-      console.error("Add Error:", err);
-    }
-  };
+        const formatIDR = (n) => new Intl.NumberFormat('id-ID', { 
+            style: 'currency', 
+            currency: 'IDR', 
+            minimumFractionDigits: 0 
+        }).format(n || 0);
 
-  if (authLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-white">
-      <Loader2 className="animate-spin text-indigo-600" size={32} />
-    </div>
-  );
+        function App() {
+            const [activeTab, setActiveTab] = useState('home');
+            const [transactions, setTransactions] = useState([
+                { id: 1, type: 'expense', amount: 50000, category: 'Makanan', description: 'Makan Siang Bakso', date: new Date() },
+                { id: 2, type: 'income', amount: 1500000, category: 'Freelance', description: 'Project Logo', date: new Date() }
+            ]);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [formData, setFormData] = useState({ type: 'expense', amount: '', category: 'Makanan', description: '' });
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row font-sans text-slate-900">
-      
-      {/* SIDEBAR */}
-      <aside className="hidden md:flex w-72 bg-white border-r border-slate-100 flex-col p-8 sticky top-0 h-screen">
-        <div className="flex items-center gap-3 text-indigo-600 font-bold text-2xl mb-12">
-            <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-200">
-                <Wallet size={24} />
-            </div>
-            <span className="tracking-tighter font-black italic uppercase">Budgetin</span>
-        </div>
-        <nav className="space-y-2 flex-1">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Beranda' },
-            { id: 'transactions', icon: ReceiptText, label: 'Riwayat' },
-            { id: 'budgets', icon: Target, label: 'Anggaran' },
-          ].map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold transition-all ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:bg-slate-50'}`}
-            >
-              <item.icon size={20} />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+            const totals = useMemo(() => {
+                return transactions.reduce((acc, curr) => {
+                    if (curr.type === 'income') acc.income += curr.amount;
+                    else acc.expense += curr.amount;
+                    acc.balance = acc.income - acc.expense;
+                    return acc;
+                }, { income: 0, expense: 0, balance: 0 });
+            }, [transactions]);
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 p-5 md:p-12 max-w-5xl mx-auto w-full pb-32 md:pb-12">
-        <header className="flex justify-between items-center mb-10">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter uppercase">{activeTab}</h1>
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Budgetin Cloud v1.0</p>
-          </div>
-          <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 md:px-8 md:py-4 rounded-2xl font-black flex items-center gap-2 transition shadow-lg shadow-indigo-100 active:scale-95">
-            <Plus size={20} />
-            <span className="hidden sm:inline">Catat Baru</span>
-          </button>
-        </header>
+            const addTransaction = (e) => {
+                e.preventDefault();
+                const newTx = {
+                    id: Date.now(),
+                    ...formData,
+                    amount: Number(formData.amount),
+                    date: new Date()
+                };
+                setTransactions([newTx, ...transactions]);
+                setIsModalOpen(false);
+                setFormData({ type: 'expense', amount: '', category: 'Makanan', description: '' });
+            };
 
-        {activeTab === 'dashboard' && (
-          <div className="space-y-8 animate-in fade-in duration-500">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="bg-indigo-600 p-8 rounded-[2.5rem] relative overflow-hidden shadow-2xl shadow-indigo-100 text-white">
-                <div className="relative z-10">
-                  <p className="text-indigo-100 font-bold mb-1 opacity-80 text-[10px] uppercase tracking-widest">Total Saldo</p>
-                  <h2 className="text-3xl font-black tracking-tight">{formatRupiah(totals.balance)}</h2>
-                </div>
-                <Sparkles size={120} className="absolute -right-6 -bottom-6 text-white/10 rotate-12" />
-              </div>
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="bg-emerald-50 p-3 rounded-2xl text-emerald-600"><TrendingUp size={24} /></div>
-                <div>
-                  <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-0.5">Masuk</p>
-                  <h2 className="text-xl font-black text-emerald-600">{formatRupiah(totals.income)}</h2>
-                </div>
-              </div>
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-4">
-                <div className="bg-rose-50 p-3 rounded-2xl text-rose-600"><TrendingDown size={24} /></div>
-                <div>
-                  <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest mb-0.5">Keluar</p>
-                  <h2 className="text-xl font-black text-rose-600">{formatRupiah(totals.expense)}</h2>
-                </div>
-              </div>
-            </div>
-
-            {/* Sheets Banner */}
-            <div className="bg-slate-900 p-8 rounded-[3rem] shadow-xl text-white flex flex-col md:flex-row items-center gap-6 justify-between border border-slate-800">
-              <div className="flex gap-4 items-center">
-                <div className="bg-indigo-600 p-3 rounded-2xl"><FileSpreadsheet size={24} /></div>
-                <div>
-                  <h3 className="font-black text-xl italic tracking-tighter">Ekspor Data Budgetin</h3>
-                  <p className="text-slate-400 font-medium text-sm">Pindahkan catatanmu ke Google Sheets dalam hitungan detik.</p>
-                </div>
-              </div>
-              <button onClick={() => setActiveTab('transactions')} className="bg-white text-slate-900 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition">Ke Menu Ekspor</button>
-            </div>
-            
-            <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
-                <h3 className="font-bold text-lg mb-6">Transaksi Terakhir</h3>
-                <div className="space-y-4">
-                    {transactions.slice(0, 5).map(trx => (
-                        <div key={trx.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl">
-                            <div className="flex items-center gap-4">
-                                <div className={`p-2 rounded-xl ${trx.type === 'income' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
-                                    {trx.type === 'income' ? <Plus size={16} /> : <TrendingDown size={16} />}
+            return (
+                <div className="max-w-md mx-auto bg-white min-h-screen shadow-2xl relative flex flex-col">
+                    
+                    {/* Header & Card */}
+                    <div className="bg-indigo-600 pt-10 pb-20 px-6 rounded-b-[2.5rem] shadow-lg">
+                        <div className="flex justify-between items-center text-white mb-8">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                                    <Icon name="user" size={20} />
                                 </div>
                                 <div>
-                                    <p className="font-bold text-sm text-slate-800">{trx.description}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{trx.category}</p>
+                                    <p className="text-[10px] uppercase font-bold opacity-60">Halo, Bro!</p>
+                                    <p className="font-bold leading-none">Budgetin User</p>
                                 </div>
                             </div>
-                            <p className={`font-black text-sm ${trx.type === 'income' ? 'text-emerald-600' : 'text-slate-900'}`}>
-                                {trx.type === 'income' ? '+' : '-'}{formatRupiah(trx.amount)}
-                            </p>
+                            <button className="relative p-2 bg-white/10 rounded-xl">
+                                <Icon name="bell" size={20} />
+                                <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full border-2 border-indigo-600"></span>
+                            </button>
                         </div>
-                    ))}
-                    {transactions.length === 0 && <p className="text-center py-10 text-slate-300 font-bold italic uppercase text-xs tracking-widest">Belum ada data</p>}
-                </div>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'transactions' && (
-            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
-                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-4 text-center md:text-left">
-                        <div className="bg-emerald-50 p-4 rounded-3xl text-emerald-600">
-                            <FileSpreadsheet size={32} />
-                        </div>
-                        <div>
-                            <h4 className="font-black text-slate-800">Ekspor Google Sheets</h4>
-                            <p className="text-xs text-slate-400 font-medium">Download file .csv yang kompatibel dengan Google Sheets & Excel.</p>
+                        <div className="text-white">
+                            <p className="text-xs font-semibold opacity-70 mb-1">Total Saldo Kamu</p>
+                            <h2 className="text-4xl font-extrabold tracking-tight mb-6">{formatIDR(totals.balance)}</h2>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="p-1 bg-emerald-500/20 rounded-lg text-emerald-400">
+                                            <Icon name="trending-up" size={14} />
+                                        </div>
+                                        <p className="text-[10px] font-bold uppercase opacity-70">Masuk</p>
+                                    </div>
+                                    <p className="font-bold text-emerald-300">{formatIDR(totals.income)}</p>
+                                </div>
+                                <div className="bg-white/10 backdrop-blur-md p-4 rounded-3xl border border-white/20">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className="p-1 bg-rose-500/20 rounded-lg text-rose-400">
+                                            <Icon name="trending-down" size={14} />
+                                        </div>
+                                        <p className="text-[10px] font-bold uppercase opacity-70">Keluar</p>
+                                    </div>
+                                    <p className="font-bold text-rose-300">{formatIDR(totals.expense)}</p>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <button 
-                        onClick={exportToSheets}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl font-black text-sm flex items-center gap-2 shadow-lg shadow-emerald-100 transition-all active:scale-95 w-full md:w-auto justify-center"
-                    >
-                        <Download size={18} />
-                        Download CSV
-                    </button>
-                </div>
 
-                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                                <tr>
-                                    <th className="p-6">Deskripsi</th>
-                                    <th className="p-6">Kategori</th>
-                                    <th className="p-6 text-right">Jumlah</th>
-                                    <th className="p-6 text-center">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-50">
-                                {transactions.map(trx => (
-                                    <tr key={trx.id} className="hover:bg-slate-50/80 transition-all">
-                                        <td className="p-6">
-                                            <p className="font-bold text-slate-900">{trx.description}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">
-                                                {trx.createdAt?.seconds ? new Date(trx.createdAt.seconds * 1000).toLocaleDateString('id-ID') : 'Syncing...'}
+                    {/* Transaction List */}
+                    <div className="flex-1 px-6 -mt-10 mb-24">
+                        <div className="bg-white rounded-[2rem] p-6 shadow-xl border border-slate-50">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="font-extrabold text-slate-800">Riwayat Terakhir</h3>
+                                <Icon name="sliders-horizontal" size={18} className="text-slate-400" />
+                            </div>
+
+                            <div className="space-y-5">
+                                {transactions.map(tx => (
+                                    <div key={tx.id} className="flex items-center justify-between group">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                                                tx.type === 'income' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                                            }`}>
+                                                <Icon name={tx.type === 'income' ? 'plus-circle' : 'shopping-bag'} size={22} />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-900 leading-tight">{tx.description}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{tx.category}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className={`font-bold ${tx.type === 'income' ? 'text-emerald-500' : 'text-slate-900'}`}>
+                                                {tx.type === 'income' ? '+' : '-'}{formatIDR(tx.amount).replace('Rp', '')}
                                             </p>
-                                        </td>
-                                        <td className="p-6">
-                                            <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg uppercase tracking-wider">{trx.category}</span>
-                                        </td>
-                                        <td className={`p-6 text-right font-black ${trx.type === 'income' ? 'text-emerald-500' : 'text-slate-900'}`}>
-                                            {trx.type === 'income' ? '+' : '-'}{formatRupiah(trx.amount).replace('Rp', '').trim()}
-                                        </td>
-                                        <td className="p-6 text-center">
-                                            <button onClick={() => deleteTrx(trx.id)} className="text-slate-200 hover:text-rose-500 transition-colors p-2 rounded-xl">
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </td>
-                                    </tr>
+                                            <p className="text-[10px] text-slate-300 font-medium">Hari ini</p>
+                                        </div>
+                                    </div>
                                 ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        )}
-
-        {activeTab === 'budgets' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in zoom-in-95 duration-500">
-                {CATEGORIES.expense.slice(0, 4).map(cat => (
-                    <div key={cat} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                        <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <h4 className="font-black text-2xl text-slate-900 tracking-tighter">{cat}</h4>
-                                <p className="font-bold text-slate-400 uppercase text-[9px] tracking-widest italic">Budgetin Cloud</p>
                             </div>
-                            <div className="bg-indigo-50 p-3 rounded-2xl text-indigo-600"><Target size={24} /></div>
-                        </div>
-                        <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden mb-4">
-                            <div className="h-full bg-indigo-600 rounded-full" style={{ width: '30%' }}></div>
-                        </div>
-                        <div className="flex justify-between items-end">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">30% Digunakan</p>
-                            <button className="text-[10px] font-black text-indigo-600 uppercase tracking-widest border-b-2 border-indigo-600">Set Limit</button>
                         </div>
                     </div>
-                ))}
-            </div>
-        )}
-      </main>
 
-      {/* MOBILE NAV */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-xl border-t border-slate-100 flex items-center justify-around py-4 px-6 z-40 pb-10 rounded-t-[2.5rem] shadow-2xl">
-          {[
-            { id: 'dashboard', icon: LayoutDashboard, label: 'Home' },
-            { id: 'transactions', icon: ReceiptText, label: 'History' },
-            { id: 'budgets', icon: Target, label: 'Budget' },
-          ].map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id)} className={`flex flex-col items-center gap-1 ${activeTab === item.id ? 'text-indigo-600 scale-110' : 'text-slate-400'}`}>
-                <item.icon size={22} />
-                <span className="text-[9px] font-black uppercase tracking-widest">{item.label}</span>
-            </button>
-          ))}
-          <button onClick={() => setIsModalOpen(true)} className="bg-indigo-600 p-2.5 rounded-xl text-white shadow-xl shadow-indigo-200 -mt-12 mb-6"><Plus size={26} /></button>
-      </nav>
-
-      {/* MODAL INPUT */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="bg-white rounded-t-[3rem] sm:rounded-[2.5rem] w-full max-w-md p-10 shadow-2xl animate-in slide-in-from-bottom duration-300">
-            <div className="flex justify-between items-center mb-8">
-              <h3 className="text-2xl font-black text-slate-900 tracking-tighter">Budgetin Baru</h3>
-              <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-2 rounded-xl text-slate-400"><X /></button>
-            </div>
-            <form onSubmit={saveTransaction} className="space-y-6">
-                <div className="flex bg-slate-100 p-1 rounded-2xl">
-                    <button type="button" onClick={() => setFormData({...formData, type: 'expense'})} className={`flex-1 py-3 rounded-xl font-bold ${formData.type === 'expense' ? 'bg-white shadow-sm text-rose-500' : 'text-slate-400'}`}>Keluar</button>
-                    <button type="button" onClick={() => setFormData({...formData, type: 'income'})} className={`flex-1 py-3 rounded-xl font-bold ${formData.type === 'income' ? 'bg-white shadow-sm text-emerald-500' : 'text-slate-400'}`}>Masuk</button>
-                </div>
-                <input required type="number" placeholder="Nominal Rp" className="w-full px-6 py-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-black text-2xl text-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
-                <select className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
-                    {CATEGORIES[formData.type].map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
-                <input required type="text" placeholder="Untuk apa?" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none font-bold" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} />
-                <button type="submit" className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-100 active:scale-95 transition-all text-lg flex items-center justify-center gap-3">
-                    <Plus size={24} />
-                    Simpan ke Cloud
-                </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* LOGIN OVERLAY */}
-      {!user && (
-          <div className="fixed inset-0 bg-white z-[100] flex items-center justify-center p-6">
-              <div className="max-w-md w-full text-center">
-                   <div className="bg-indigo-600 w-20 h-20 rounded-[2rem] text-white flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-indigo-100">
-                        <Wallet size={40} />
-                   </div>
-                   <h2 className="text-4xl font-black italic tracking-tighter mb-2 uppercase">Budgetin</h2>
-                   <p className="text-slate-400 font-medium mb-12 italic">Atur uangmu, tenangin pikiranmu.</p>
-                   <form onSubmit={handleAuthSubmit} className="space-y-4 text-left">
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Username</label>
-                            <div className="relative">
-                                <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-                                <input name="username" required type="text" className="w-full pl-14 pr-6 py-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 font-bold transition-all" placeholder="budi_satu" />
-                            </div>
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Password</label>
-                            <div className="relative">
-                                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-                                <input name="password" required type="password" className="w-full pl-14 pr-6 py-5 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-50 font-bold transition-all" placeholder="••••••••" />
-                            </div>
-                        </div>
-                        {authError && <p className="text-rose-500 text-xs font-bold text-center mt-2 uppercase">{authError}</p>}
-                        <button disabled={isSubmittingAuth} type="submit" className="w-full bg-indigo-600 text-white font-black py-5 rounded-2xl shadow-xl shadow-indigo-100 mt-6 active:scale-95 transition-all text-lg flex items-center justify-center gap-3 uppercase tracking-tighter italic">
-                            {isSubmittingAuth ? <Loader2 className="animate-spin" size={24} /> : (isRegisterMode ? 'Mulai Budgetin' : 'Masuk Cloud')}
+                    {/* Bottom Navigation */}
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[90%] max-w-[360px] bg-slate-900/90 backdrop-blur-xl rounded-[2.5rem] p-4 flex justify-between items-center shadow-2xl z-40 border border-white/10">
+                        <button onClick={() => setActiveTab('home')} className={`p-3 rounded-2xl transition-all ${activeTab === 'home' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>
+                            <Icon name="layout-grid" />
                         </button>
-                   </form>
-                   <button onClick={() => setIsRegisterMode(!isRegisterMode)} className="mt-8 text-indigo-600 font-black text-xs uppercase tracking-widest border-b-2 border-indigo-600 pb-0.5">
-                       {isRegisterMode ? 'Punya akun? Login' : 'Baru di sini? Daftar akun'}
-                   </button>
-              </div>
-          </div>
-      )}
-    </div>
-  );
-}
+                        <button onClick={() => setIsModalOpen(true)} className="w-14 h-14 bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-xl shadow-indigo-500/40 -mt-12 border-4 border-white active:scale-90 transition-all">
+                            <Icon name="plus" size={28} />
+                        </button>
+                        <button onClick={() => setActiveTab('user')} className={`p-3 rounded-2xl transition-all ${activeTab === 'user' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500'}`}>
+                            <Icon name="user" />
+                        </button>
+                    </div>
+
+                    {/* Modal Input */}
+                    {isModalOpen && (
+                        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end">
+                            <div className="w-full max-w-md mx-auto bg-white rounded-t-[3rem] p-8 animate-pop">
+                                <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-8"></div>
+                                <div className="flex justify-between items-center mb-8">
+                                    <h2 className="text-2xl font-extrabold italic text-slate-800 tracking-tight">BUAT CATATAN</h2>
+                                    <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-2 rounded-xl text-slate-400">
+                                        <Icon name="x" size={20} />
+                                    </button>
+                                </div>
+
+                                <form onSubmit={addTransaction} className="space-y-6">
+                                    <div className="flex p-1 bg-slate-100 rounded-2xl">
+                                        <button 
+                                            type="button"
+                                            onClick={() => setFormData({...formData, type: 'expense'})}
+                                            className={`flex-1 py-3 rounded-xl font-bold uppercase text-xs transition-all ${formData.type === 'expense' ? 'bg-white shadow text-rose-500' : 'text-slate-400'}`}
+                                        >Keluar</button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => setFormData({...formData, type: 'income'})}
+                                            className={`flex-1 py-3 rounded-xl font-bold uppercase text-xs transition-all ${formData.type === 'income' ? 'bg-white shadow text-emerald-500' : 'text-slate-400'}`}
+                                        >Masuk</button>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nominal</label>
+                                        <input 
+                                            autoFocus
+                                            required
+                                            type="number" 
+                                            placeholder="0" 
+                                            className="w-full text-4xl font-black p-4 bg-slate-50 rounded-3xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 transition-all"
+                                            value={formData.amount}
+                                            onChange={e => setFormData({...formData, amount: e.target.value})}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Untuk Apa?</label>
+                                        <input 
+                                            required
+                                            type="text" 
+                                            placeholder="Contoh: Makan Siang" 
+                                            className="w-full font-bold p-5 bg-slate-50 rounded-2xl outline-none focus:bg-white border-2 border-transparent focus:border-indigo-100 transition-all"
+                                            value={formData.description}
+                                            onChange={e => setFormData({...formData, description: e.target.value})}
+                                        />
+                                    </div>
+
+                                    <button type="submit" className="w-full bg-indigo-600 text-white font-black py-5 rounded-[2rem] shadow-xl shadow-indigo-200 active:scale-95 transition-all uppercase italic tracking-tighter">
+                                        Simpan Sekarang
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
