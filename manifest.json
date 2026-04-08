@@ -5,11 +5,13 @@
   "display": "standalone",
   "background_color": "#4f46e5",
   "theme_color": "#4f46e5",
+  "description": "Dompet Digital & Pencatat Keuangan Pintar",
   "icons": [
     {
-      "src": "[https://cdn-icons-png.flaticon.com/512/10433/10433048.png](https://cdn-icons-png.flaticon.com/512/10433/10433048.png)",
+      "src": "https://cdn-icons-png.flaticon.com/512/10433/10433048.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
